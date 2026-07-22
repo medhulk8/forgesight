@@ -4,6 +4,24 @@ _Newest entry at top._
 
 ---
 
+## 2026-07-22 — Stage §13 step 6 (`data/conversation.py`) + M3 processor de-risk
+
+**Stage:** §13 step 6 — record → Qwen2-VL chat messages.
+
+**Implemented:**
+- `data/conversation.py`: `SYSTEM_PROMPT` (native-box format), `USER_INSTRUCTION`, `image_uri`, `build_messages(record, data_root=None, include_target=True)`. Pure + disk-agnostic (path math only); image referenced by `file://<abs>` URI (NOT PIL — DataLoader pickling/memory); assistant target reuses `schema.to_target_json`. `include_target=False` → inference messages (no assistant turn).
+- `tests/test_conversation.py`: 5 offline tests (structure, uri, target = to_target_json, inference omits assistant, prompt mentions native tokens). Suite 108 green.
+
+**M3 processor de-risk (verified live — gates step 7):** installed transformers==4.47.1 + qwen-vl-utils + jinja2 on py3.14; `AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")` loads; `apply_chat_template` renders correctly (system / user with `<|vision_start|><|image_pad|><|vision_end|>` / assistant target incl native box tokens, single render). Token ids: im_start=151644, im_end=151645, image_pad=151655, box_start=151648, box_end=151649; `assistant\n`=[77091,198] (collator n_tail=2); box tokens survive tokenize→decode roundtrip (the §7.4 critical assertion will hold).
+
+**Decisions (all Gemini step-6 answers accepted):** file:// URI over PIL; updated system prompt (native-box string, not §6.1 verbatim); pure `build_messages(record, data_root)`; reuse `to_target_json`. Added `include_target` param for inference reuse (step 12).
+
+**Env notes:** jinja2 not auto-pulled by transformers but required by `apply_chat_template` → added to requirements-dev.txt. pip downgraded huggingface-hub 1.24→0.36.2 for transformers 4.47.1; datasets 5.0.0 still imports fine. **torch still NOT installed** — the step-7 collator smoke test needs it (return_tensors=pt, image tensors); torch>=2.3 on py3.14 is the next gating risk to verify at step 7 open.
+
+**Next session starts with:** §13 step 7 — `collator.py` (§7.2/7.3 single-pass token-search masking) + `scripts/smoke_collator.py` (§7.4 assertions, esp. decoded unmasked span == target JSON). First verify torch installs on M3/py3.14. Issue Gemini prompt (hardest gate).
+
+---
+
 ## 2026-07-22 — Stage §13 step 5 (`data/build_dataset.py`)
 
 **Stage:** §13 step 5 — build the doc-level-split, class-balanced dataset on disk.

@@ -1,6 +1,7 @@
 torch>=2.3                 # MPS build
 torchvision
 transformers==4.47.1
+jinja2                     # required by transformers apply_chat_template (not auto-pulled)
 datasets>=3.0
 qwen-vl-utils
 pillow
