@@ -9,6 +9,7 @@ dist/
 # secrets
 .env
 
-# data + artifacts are large / generated (§2)
-data/
-artifacts/
+# data + artifacts are large / generated (§2) — anchored to repo root so the
+# src/forgesight/data/ PACKAGE is NOT ignored (unanchored `data/` matched it).
+/data/
+/artifacts/

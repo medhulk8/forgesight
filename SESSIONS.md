@@ -4,6 +4,32 @@ _Newest entry at top._
 
 ---
 
+## 2026-07-22 — Stage §13 step 5 (`data/build_dataset.py`)
+
+**Stage:** §13 step 5 — build the doc-level-split, class-balanced dataset on disk.
+
+**Implemented:**
+- `pipeline.forge_variants(doc, pool, rng, n_tampered)`: 1 clean + up to N distinct-op tampered variants per base doc (all sharing doc_id), reproducible.
+- `data/build_dataset.py`: pure helpers `assign_splits` (doc-level 70/15/15, deterministic), `balance_5050` (oversample minority), `compute_manifest`; `build()` orchestrates ingest → doc-split → per-(split,source) donor pools → forge_variants → save PNG + set image_path + `validate_record` → balance TRAIN → `_assert_no_leakage` → write HF splits. `configs/data.yaml`.
+- `scripts/make_manifest.py`: recompute stats from on-disk splits.
+- `tests/test_build_dataset.py`: 10 offline tests (split partition/determinism, balance, forge_variants distinct-ops, leakage assert fires, manifest counts). Suite 103 green.
+
+**Generated (live, ~90s):** `data/processed/` — 2964 examples (train 2244 / val 360 / test 360), 801 base docs (sroie 652 + funsd 149). Train 50/50 (1122/1122); val/test natural 33% clean. Op spread uniform (~57–66 per type per eval split). Manifest written.
+
+**Gates (all pass, independently verified):** 0 cross-split doc_id leaks (re-checked from disk, not just inline assert); 0 invalid records across all splits; a persisted PNG rendered with its stored `box_pixel` → GT box lands on the altered amount line (image+coord round-trip through disk intact).
+
+**Decisions / deviations from Gemini's step-5 answers:**
+- Accepted: multi-variant (1 clean + up to 2 tampered), all variants same split, natural op spread.
+- **Deviation (balance):** Gemini said oversample clean to 50/50 dataset-wide. Applied 50/50 to TRAIN ONLY; val/test keep natural distribution. Duplicating eval rows would bias ForgeBench F1/CIs — the D7 eval-integrity story. Flagged to Gemini.
+- **Deviation (image format):** Gemini said ghost=JPEG, others=PNG. Used PNG for ALL. The recompress_ghost op does its JPEG round-trips internally → the artifact is already baked into the returned decoded pixels; PNG stores them losslessly (JPEG would add a spurious 3rd compression), and uniform format removes any format-based shortcut. Flagged to Gemini.
+- Extra: donor pools built per (split, source), not global — a splice pasting a crop from another split would be subtle cross-split pixel leakage.
+
+**Gemini consultation:** step-5 (volume/multi-variant, balance, image format, op spread). Resolution above — 2 documented deviations after reasoning about eval integrity + artifact mechanics.
+
+**Next session starts with:** §13 step 6 — `data/conversation.py` (record → Qwen2-VL chat messages, system prompt §6.1, image in user turn, assistant target = `schema.to_target_json`). Gate: printed chat template correct, image inserted. Issue Gemini prompt first.
+
+---
+
 ## 2026-07-22 — Stage §13 step 4 (`forgery/` ops + pipeline)
 
 **Stage:** §13 step 4 — synthetic forgery ops + orchestration.

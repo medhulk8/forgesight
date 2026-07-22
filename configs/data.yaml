@@ -1,0 +1,29 @@
+# ForgeSight dataset build config (§5, §13 step 5).
+
+seed: 0
+sources: [sroie, funsd]
+limit_per_source: null          # null = all docs
+
+# per base doc: always 1 clean + up to N distinct-op tampered variants
+n_tampered_variants: 2
+
+# doc-level split (all variants of a base doc stay in ONE split — no leakage)
+split_ratios:
+  train: 0.70
+  val: 0.15
+  test: 0.15
+
+# 50/50 clean:tampered — TRAIN ONLY, via oversampling clean rows.
+# val/test keep the natural distribution (duplicating eval rows would bias ForgeBench).
+balance_train_5050: true
+
+# splice donors harvested per (split, source) so a splice never pastes a crop
+# from a doc in another split (subtle pixel leakage otherwise).
+donor_pool_per_split: true
+
+# all images saved lossless PNG: the recompress_ghost artifact is already baked
+# into the op's returned pixels (its JPEG round-trips happen internally); PNG
+# preserves them exactly and a uniform format prevents any format-based shortcut.
+image_format: png
+
+out_dir: data/processed

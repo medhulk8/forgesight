@@ -100,6 +100,36 @@ def forge_one(doc, donor_pool, rng: random.Random, p_clean=0.5, op_names=None):
     return doc["image"].convert("RGB").copy(), _clean_record(doc)
 
 
+def forge_variants(doc, donor_pool, rng: random.Random, n_tampered=2):
+    """Return [(image, record), ...] = 1 clean + up to n_tampered DISTINCT-op
+    tampered variants for a single base doc (§13 step 5, Gemini multi-variant).
+
+    All variants share the doc_id → the caller keeps them in the same split.
+    Ops that fail to apply (e.g. no empty region) are skipped, not retried."""
+    out = [(doc["image"].convert("RGB").copy(), _clean_record(doc))]
+
+    ops = build_ops(doc["source"], donor_pool)
+    order = [n for n in OP_NAMES if ops[n].applicable(doc)]
+    rng.shuffle(order)
+
+    for name in order:
+        if len(out) - 1 >= n_tampered:
+            break
+        try:
+            image, gt, meta = ops[name].apply(doc["image"], doc["ocr_boxes"], rng)
+        except ValueError:
+            continue
+        rec = {
+            "image_path": None,
+            "source": doc["source"], "doc_id": doc["doc_id"],
+            "width": doc["width"], "height": doc["height"],
+            "tampered": True, "field": meta["field"], "tamper_type": name,
+            "box_pixel": gt, "reason": meta["reason"],
+        }
+        out.append((image, rec))
+    return out
+
+
 def generate(docs, seed=0, p_clean=0.5):
     """Yield (image, record) for each source-doc. `docs` must be a list (reused to
     build the splice donor pool first)."""
