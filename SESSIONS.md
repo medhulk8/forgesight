@@ -4,6 +4,25 @@ _Newest entry at top._
 
 ---
 
+## 2026-07-22 — Stage §13 step 4 (`forgery/` ops + pipeline)
+
+**Stage:** §13 step 4 — synthetic forgery ops + orchestration.
+
+**Implemented:**
+- `forgery/base.py`: `ForgeryOp` interface (`applicable` / `apply(image, ocr_boxes, rng) -> (image, gt_box_pixel, meta{field,reason})`) + geometry helpers (`clamp_box`, `boxes_overlap`, `sample_empty_box`, `pick_box`, `label_to_field`).
+- Four ops (D-order): `digit_swap` (intra-doc digit copy over numeric line; GT = whole line box), `copy_move` (field patch → whitespace via `sample_empty_box`; GT = paste loc), `splice` (intra-source donor crop over a field; GT = field box), `recompress_ghost` (patch JPEG-recompressed + offset, whole image re-saved lower quality; GT = patch).
+- `forgery/pipeline.py`: `harvest_donor_crops` (per-source splice pool), `build_ops`, `forge_one` (p_clean → clean D5 hard-neg, else sampled applicable op w/ fallback), `generate` (per-doc RNG seeded from doc_id → reproducible). Emits §4-shape records (+ `doc_id`/`source` for step-5 split), `image_path=None`.
+- `scripts/viz_sample.py`: forces each op on real docs, overlays GT box, saves PNGs.
+- `tests/test_forgery.py`: 14 offline tests (synthetic images) — helpers, each op (valid GT, size preserved, pixels changed, applicability), pipeline clean/tampered/determinism. Suite 94 green.
+
+**Visual gate (eyeballed real forgeries):** digit_swap on SROIE amount lines, copy_move duplicating field values into whitespace, splice mismatched donor over a field, recompress_ghost subtle patch — GT boxes land correctly on all 4 ops × SROIE + FUNSD. `generate()` on 300 docs → 48% clean, op dist {digit_swap 46, recompress_ghost 39, copy_move 38, splice 32}.
+
+**Decisions (all Gemini answers accepted after review — sound):** line-box GT for digit_swap (no OpenCV); intra-doc digit copy-paste not TTF (avoid clean-antialiasing tell); intra-source splice donors; patch-GT for recompress_ghost; parameterized reason templates w/ field interpolation.
+
+**Open / next:** PAUSED per Gemini request for human eyeball of forgery quality + boxes before mass generation. Next = §13 step 5 `data/build_dataset.py` (doc-level split, balanced train/val/test, persist images + HF dataset, `make_manifest.py` stats, leakage assertion).
+
+---
+
 ## 2026-07-22 — Stage §13 step 3 (`data/ingest.py`)
 
 **Stage:** §13 step 3 — ingest SROIE + FUNSD → normalized source-doc records with OCR boxes.

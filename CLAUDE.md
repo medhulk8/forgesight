@@ -14,8 +14,9 @@ QLoRA fine-tune of **Qwen2-VL-2B-Instruct** for document **tamper detection + sp
 Everything under `src/forgesight/` imports + unit-tests on M3 with no GPU and no bitsandbytes. GPU-only concerns (4-bit load, training) live behind `model.py` / `train_*.py`, exercised only on Kaggle. Boxes use native `<|box_start|>` grounding tokens (D2/D3) — never raw-int arrays. Collator is single-pass, token-search masking (§7.2/7.3) — never double-render.
 
 ## Current stage
-Stages §13 1–3 **done**. Step 3: `data/ingest.py` loads SROIE (`arvindrajan92/sroie_document_understanding`, 652 docs) + FUNSD (`nielsr/funsd`, 149+50) → source-doc records w/ full `ocr_boxes`; boxes land on words (visually verified). 80 tests green. Next: §13 step 4 — `forgery/` ops (digit_swap→copy_move→splice→recompress_ghost) + `pipeline.py`.
-Coord gotchas (locked): SROIE quads = pixels; FUNSD bboxes = 0–1000 normalized (convert via `norm_to_pixel`). Ingest emits a **source-doc** record (carries `ocr_boxes`), distinct from the §4 training record (produced at step 5).
+Stages §13 1–4 **done**. Step 4: `forgery/` (base ForgeryOp + digit_swap/copy_move/splice/recompress_ghost + pipeline.py) + `scripts/viz_sample.py`. GT boxes land correctly on all 4 ops × both sources (visually verified). `pipeline.generate()` → ~48% clean, uniform op spread. 94 tests green. **Paused for human/Gemini eyeball before step 5 (mass dataset gen).**
+Op design (locked): digit_swap GT = whole numeric line box, alteration = intra-doc digit copy (no TTF); splice donors intra-source only; recompress_ghost GT = tampered patch. Reasons = parameterized templates.
+Coord gotchas (locked): SROIE quads = pixels; FUNSD bboxes = 0–1000 normalized (convert via `norm_to_pixel`). Ingest emits a **source-doc** record (`ocr_boxes`); pipeline emits §4-shape record with `image_path=None` (build_dataset fills + persists at step 5).
 
 ## Pointers
 Full plan → [plan.md](plan.md). Session history → [SESSIONS.md](SESSIONS.md).
