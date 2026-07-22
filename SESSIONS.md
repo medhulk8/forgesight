@@ -4,6 +4,26 @@ _Newest entry at top._
 
 ---
 
+## 2026-07-22 — Stage §13 step 7 (`collator.py`) — M3 CRUX, PASSED
+
+**Stage:** §13 step 7 — THE data collator + smoke gate. Completes the M3 (GPU-free) phase.
+
+**Env change (Gemini-advised):** rebuilt the dev venv on **Python 3.11** (via `uv python install 3.11`; torch 2.13.0 + torchvision 0.28.0 wheels install cleanly, MPS available). Python 3.14 had no torch wheel. Aligns dev with Kaggle T4 (3.10/3.11) to avoid pickle/serialization drift. Full stack reinstalled; 108 tests green on 3.11.
+
+**Implemented:**
+- `collator.py` `ForgeSightCollator(processor, build_messages, max_length=2048)`: single-pass (`apply_chat_template` + `process_vision_info` once per record), mask by locating LAST `<|im_start|>` + fixed `assistant\n` tail (n_tail=2) → `labels[:comp_start]=-100`; pad→-100; image_pad→-100. `padding_side="right"` on tokenizer AND processor. Truncation guard + final "no learnable tokens" net.
+- `scripts/smoke_collator.py`: 2 tampered + 2 clean (varied) + 1 over-long; monkeypatches `process_vision_info` to prove single-pass; asserts shapes, decoded unmasked span == `to_target_json`, zero learnable pad/image tokens, guard fires on over-long only.
+
+**Gate — SMOKE PASSED on CPU:** shapes (5,2048); process_vision_info ran exactly 5× for 5 records; no learnable pad/image tokens; **every normal row decoded unmasked span EXACTLY equals target JSON (native `<|box_start|>` tokens survive round-trip)**; truncation guard fired on the over-long row only.
+
+**Bug found + fixed during smoke:** first guard checked `row[last_real] == im_end`, but Qwen turns render as `<|im_end|>\n` → the last non-pad token is the newline (198), so the guard fired on every row. Fixed: termination = an `<|im_end|>` exists *within the completion span* `row[comp_start:last_real+1]` (absent only when the tail was truncated). Verified: normal rows silent, over-long warns.
+
+**Decisions (all Gemini step-7 answers accepted):** pin whole dev venv to 3.11; assert `(labels!=-100).sum()>0` (added as final net + per-row); `padding_side="right"` on both; monkeypatch to prove O(N) single-pass.
+
+**Next session starts with:** §13 step 8 — first GPU/Kaggle step. Push repo (ongoing), upload `data/processed/` as a PRIVATE Kaggle Dataset, thin Kaggle notebook that `git clone`s the repo + attaches the dataset + `import forgesight`. Then step 9 (model.py 4-bit load) and step 10 (overfit-8). Issue Gemini prompt on the Kaggle bridge first.
+
+---
+
 ## 2026-07-22 — Stage §13 step 6 (`data/conversation.py`) + M3 processor de-risk
 
 **Stage:** §13 step 6 — record → Qwen2-VL chat messages.
