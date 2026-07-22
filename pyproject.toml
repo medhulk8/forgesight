@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "forgesight"
+version = "0.0.1"
+description = "QLoRA fine-tuning of Qwen2-VL-2B for document tamper detection with spatial grounding"
+requires-python = ">=3.10"
+# Runtime deps are intentionally NOT declared here. schema.py/coords.py use only
+# the stdlib, so `pip install -e .` stays lightweight on the M3. Heavy deps
+# (torch/transformers/...) are pinned in requirements-dev.txt (M3) and
+# requirements-kaggle.txt (T4) and installed explicitly per environment.
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

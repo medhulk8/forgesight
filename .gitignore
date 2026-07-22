@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+*.egg-info/
+build/
+dist/
+
+# secrets
+.env
+
+# data + artifacts are large / generated (§2)
+data/
+artifacts/

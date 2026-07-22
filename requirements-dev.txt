@@ -1,0 +1,13 @@
+torch>=2.3                 # MPS build
+torchvision
+transformers==4.47.1
+datasets>=3.0
+qwen-vl-utils
+pillow
+opencv-python
+numpy
+pyyaml
+matplotlib
+scipy                      # Wilson CI, McNemar
+pytest
+# NOTE: NO bitsandbytes (CUDA-only), NO flash-attn, NO trl needed for dev-only shape tests
