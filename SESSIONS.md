@@ -4,6 +4,29 @@ _Newest entry at top._
 
 ---
 
+## 2026-07-22 — Stage §13 step 3 (`data/ingest.py`)
+
+**Stage:** §13 step 3 — ingest SROIE + FUNSD → normalized source-doc records with OCR boxes.
+
+**Implemented:**
+- `data/ingest.py`: pure normalizers (`is_numeric`, `quad_to_bbox`, `funsd_box_to_pixel`, `strip_bio`, `normalize_{sroie,funsd}_example`) + IO loaders (`load_funsd`, `load_sroie`, `load_source_docs`). Emits **source-doc** record `{source,doc_id,width,height,image(RGB),ocr_boxes:[{text,box_pixel,label,is_numeric}]}` — deliberately NOT the §4 training record (that comes at step 5 after forgery).
+- `tests/test_ingest.py`: 20 offline tests (network-free) on the pure fns + fake-example normalization. Suite now 80 green.
+- Visual gate: overlaid OCR boxes on real SROIE + FUNSD docs, viewed PNGs — boxes land tightly on words/lines, numeric flag correct. PASSED.
+
+**Decisions / deviations (from Gemini's Step-3 answers):**
+- **SROIE dataset ID changed.** Gemini said `darentang/sroie`; verified live → it's a *script* dataset, unusable on datasets>=4 (script loading removed; we have 5.0.0). Switched to parquet mirror `arvindrajan92/sroie_document_understanding` (image + `ocr:[{box:quad, label, text}]`, 652 train docs, labels company/address/date/total/line_total/line_description/other). FUNSD `nielsr/funsd` confirmed parquet, kept.
+- **FUNSD coord gotcha (Gemini didn't flag).** `nielsr/funsd` bboxes are 0–1000 LayoutLM-normalized, NOT pixels (bbox maxes 841–946 > image width 762). Convert via `coords.norm_to_pixel`. SROIE quads ARE pixels → just quad→axis-aligned bbox. Both verified visually.
+- Agreed with Gemini: quad→axis-aligned bbox; store full `ocr_boxes` list (not just candidate sites); defer CORD.
+- Kept test suite network-free — live loading validated by the visual gate script, not pytest.
+
+**Gemini consultation:** Step-3 approach (SROIE geometry, dataset IDs, ocr_boxes storage, CORD). Resolution above — implemented with 2 corrections after live verification (dataset ID, FUNSD coord scale).
+
+**Env note:** py3.14 + datasets 5.0.0 emits a harmless `AttributeError: 'NoneType' ... ArrowInvalid` on streaming-generator close (teardown only; data reads fine). Non-streaming load avoids it.
+
+**Next session starts with:** §13 step 4 — implement `forgery/` ops in D-order (digit_swap → copy_move → splice → recompress_ghost) + `pipeline.py`. Gate: `scripts/viz_sample.py` shows correct GT box on ~30 samples/op by eye. Issue a Gemini prompt on forgery-op design first.
+
+---
+
 ## 2026-07-22 — Stages §13 1–2 + governance setup
 
 **Stage:** §13 steps 1 (repo skeleton) + 2 (schema.py + coords.py); then project governance retrofit.
