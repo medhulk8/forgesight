@@ -64,6 +64,34 @@ def _variant_tag(rec):
     return "clean" if not rec["tampered"] else rec["tamper_type"]
 
 
+def _save_image(image, img_dir, doc_id, tag, fmt="jpg", max_side=1024, quality=90):
+    """Persist a forged image, downscaled to max_side and (optionally) JPEG-compressed.
+
+    Returns the filename. IMPORTANT: the record's box_pixel/width/height stay in the
+    ORIGINAL pixel space — the target box is emitted as a 0..1000 NORMALISED string
+    (resolution-independent) and eval IoU uses the stored original dims, so the stored
+    pixels can be shrunk freely (Qwen2-VL caps visual tokens at ~max_pixels anyway, so
+    full-res is wasted). Full-res PNG produced a 2.1 GB dump that would not upload;
+    downscaled JPEG is ~10x smaller with no effect on the coordinate math.
+    """
+    from PIL import Image
+
+    w, h = image.size
+    longest = max(w, h)
+    if max_side and longest > max_side:
+        scale = max_side / longest
+        image = image.resize((max(1, round(w * scale)), max(1, round(h * scale))),
+                             Image.LANCZOS)
+    ext = "jpg" if fmt.lower() in ("jpg", "jpeg") else "png"
+    fname = f"{doc_id}__{tag}.{ext}"
+    if ext == "jpg":
+        image.convert("RGB").save(os.path.join(img_dir, fname), format="JPEG",
+                                  quality=quality)
+    else:
+        image.save(os.path.join(img_dir, fname), format="PNG")
+    return fname
+
+
 # --------------------------------------------------------------------------- #
 # build
 # --------------------------------------------------------------------------- #
@@ -94,10 +122,12 @@ def build(config: dict):
             rng = random.Random(pipeline._doc_seed(doc["doc_id"], seed))
             for image, rec in pipeline.forge_variants(
                     doc, donor_pools[sp], rng, n_tampered=config["n_tampered_variants"]):
-                fname = f"{doc['doc_id']}__{_variant_tag(rec)}.png"
-                rel = os.path.join("images", sp, fname)
-                image.save(os.path.join(img_dir, fname), format="PNG")
-                rec["image_path"] = rel
+                fname = _save_image(
+                    image, img_dir, doc["doc_id"], _variant_tag(rec),
+                    fmt=config.get("image_format", "jpg"),
+                    max_side=config.get("max_image_side", 1024),
+                    quality=config.get("jpeg_quality", 90))
+                rec["image_path"] = os.path.join("images", sp, fname)
                 schema.validate_record(rec)   # fail fast on any malformed target
                 records.append(rec)
         split_records[sp] = records

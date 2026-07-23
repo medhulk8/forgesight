@@ -4,6 +4,20 @@ _Newest entry at top._
 
 ---
 
+## 2026-07-23 — Step 8 exec: dataset uploaded to Kaggle (after size fix)
+
+**What happened:** set up Kaggle CLI on M3 (uv-installed `kaggle`, token at `~/.kaggle/access_token`, auth OK — username **medhulkhandelwal**). First upload of `data/processed/` (2.1 GB, full-res lossless PNG) repeatedly died with `BrokenPipeError` to googleapis at ~97% of the 1.67 GB images.zip — flaky link + oversized dump.
+
+**Fix (deviation, engineering call):** switched stored images to **downscaled JPEG** (`configs/data.yaml`: image_format=jpg, max_image_side=1024, jpeg_quality=90; `build_dataset._save_image`). **2.1 GB → 247 MB.** Records UNCHANGED — box_pixel/width/height stay in ORIGINAL pixel space, target box is a 0..1000 normalised (resolution-independent) string, eval IoU uses original dims — so shrinking stored pixels does not touch the coordinate math. Qwen2-VL downscales to ~max_pixels on load anyway, so full-res PNG was wasted bytes. Re-verified: collator span==target on the JPEG data; 113 tests green. Re-upload succeeded (images.zip 232 MB). Dataset `medhulkhandelwal/forgesight-data` registered PRIVATE.
+
+**Note:** overrides the earlier stage-5 "lossless PNG for all" decision. Rationale is upload feasibility + no coord/quality impact (model never sees > max_pixels). Flag to Gemini.
+
+**Security:** user pasted the live Kaggle token (KGAT_...) in chat → advised rotation after. Stored only in `~/.kaggle/access_token` (never committed).
+
+**Next:** user does GitHub PAT (step D) → Kaggle Secret `GH_PAT` (E) → import notebook + GPU T4×2 + Internet on + attach dataset (F) → Run All, stop after overfit-8 (G). Report loss curve + cell-7 JSON reproduction.
+
+---
+
 ## 2026-07-23 — Stages §13 steps 8–10 (code) — Kaggle bridge; GPU gates pending
 
 **Stage:** §13 step 8 (Kaggle bridge) + step 9 (`model.py`) + step 10 (`train_sft.py` overfit-8) — all CODE written; GPU gates run on Kaggle by user (M3 has no CUDA/bitsandbytes, D10).

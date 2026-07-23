@@ -21,9 +21,14 @@ balance_train_5050: true
 # from a doc in another split (subtle pixel leakage otherwise).
 donor_pool_per_split: true
 
-# all images saved lossless PNG: the recompress_ghost artifact is already baked
-# into the op's returned pixels (its JPEG round-trips happen internally); PNG
-# preserves them exactly and a uniform format prevents any format-based shortcut.
-image_format: png
+# Images saved as downscaled JPEG. Full-res lossless PNG produced a 2.1 GB dump
+# that would not upload to Kaggle over a flaky link. box_pixel/width/height stay in
+# ORIGINAL pixel space and the target box is a 0..1000 normalised string
+# (resolution-independent), so shrinking the stored pixels does NOT affect the
+# coordinate math or eval IoU — and Qwen2-VL downscales to ~max_pixels on load
+# anyway, so full-res was wasted bytes. Uniform format also avoids any format shortcut.
+image_format: jpg
+max_image_side: 1024        # cap the longest side (px) before saving
+jpeg_quality: 90
 
 out_dir: data/processed
