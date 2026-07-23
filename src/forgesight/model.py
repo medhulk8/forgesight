@@ -86,14 +86,16 @@ def load_model_for_training(use_4bit=True, attn="sdpa", lora=True,
         device_map = {"": 0}
 
     # T4 (Turing) has fp16 tensor cores but NOT bf16 → use fp16 compute for speed.
-    # Skip quantizing the merger: modules_to_save trains it, and a trainable copy
-    # of a 4-bit module is unsafe — keep it in fp16.
+    # Skip quantizing the merger (modules_to_save trains it; a trainable copy of a
+    # 4-bit module is unsafe) AND lm_head: passing llm_int8_skip_modules OVERRIDES
+    # transformers' auto skip-list, which normally protects lm_head — omitting it
+    # gets lm_head 4-bit-quantized and bnb then asserts on its missing quant state.
     bnb = None
     if use_4bit:
         bnb = BitsAndBytesConfig(
             load_in_4bit=True, bnb_4bit_quant_type="nf4",
             bnb_4bit_compute_dtype=torch.float16, bnb_4bit_use_double_quant=True,
-            llm_int8_skip_modules=["merger"],
+            llm_int8_skip_modules=["lm_head", "merger"],
         )
 
     model = Qwen2VLForConditionalGeneration.from_pretrained(
