@@ -20,7 +20,9 @@ _Newest entry at top._
 
 **OPEN ISSUE (needs decision):** `recompress_ghost` examples still generate "clean" — its signal IS the JPEG double-compression grid artifact, and our storage change (downscale + re-JPEG q90) destroys exactly that. So ghost images are ~indistinguishable from clean; unlearnable/undetectable. digit_swap/copy_move/splice are pixel-level edits and survive JPEG fine. Consulting Gemini: store ghost lossless vs drop the op vs rework. Affects step-11 training + D7 per-type eval.
 
-**Next:** resolve ghost decision (Gemini), then step 11 (full SFT single-GPU). Model/train code now single-GPU + balanced overfit + IoU reporting, all pushed.
+**Resolved (Gemini concurred):** DROPPED recompress_ghost — 3 ops (digit_swap/copy_move/splice = manipulation/duplication/insertion). Rationale: signal destroyed by JPEG storage → unlearnable → would poison hard-negative baseline. Op file kept dormant; removed from pipeline OP_NAMES/build_ops. Rebuilt dataset (2964 ex, train 50/50, 3 ops uniform, 248 MB), re-uploaded as Kaggle dataset v2 (ready). Notebook repurposed for step 11: full SFT + train/val loss curves + val-generation peek; data mount path + single-GPU noted. All pushed.
+
+**Next: step 11 — user runs the full SFT on Kaggle** (fresh session: factory reset → run cells 1–7). ~1–2h. Report loss curves + val gen. Then step 12 (ForgeBench eval — infer/forgebench/metrics still stubs).
 
 ---
 
