@@ -9,9 +9,11 @@ from __future__ import annotations
 
 MODEL_ID = "Qwen/Qwen2-VL-2B-Instruct"
 
-# min/max visual tokens — the main VRAM/seq-length lever on T4 (§8). Tune down if OOM.
-MIN_PIXELS = 256 * 28 * 28
-MAX_PIXELS = 768 * 28 * 28
+# min/max visual tokens — the main VRAM/seq-length AND SPEED lever on T4 (§8).
+# Lowered from 768 -> 384 max: receipts/forms are readable at ~300k px and this
+# ~halves the image-token count → ~2x faster training with negligible field-OCR loss.
+MIN_PIXELS = 128 * 28 * 28
+MAX_PIXELS = 384 * 28 * 28
 
 # LoRA on the LLM projection layers only; vision tower frozen (cheaper, stable,
 # standard for VLM QLoRA). Unfreezing the merger is a possible ablation (§8).
@@ -59,15 +61,16 @@ def load_model_for_training(use_4bit=True, attn="sdpa", lora=True,
     if device_map is None:
         device_map = {"": 0}
 
+    # T4 (Turing) has fp16 tensor cores but NOT bf16 → use fp16 compute for speed.
     bnb = None
     if use_4bit:
         bnb = BitsAndBytesConfig(
             load_in_4bit=True, bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=True,
+            bnb_4bit_compute_dtype=torch.float16, bnb_4bit_use_double_quant=True,
         )
 
     model = Qwen2VLForConditionalGeneration.from_pretrained(
-        MODEL_ID, quantization_config=bnb, torch_dtype=torch.bfloat16,
+        MODEL_ID, quantization_config=bnb, torch_dtype=torch.float16,
         attn_implementation=attn, device_map=device_map,
     )
 
