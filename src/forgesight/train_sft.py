@@ -34,7 +34,14 @@ def _load_splits(data_root, overfit=None):
     train = ds["train"]
     val = ds["val"]
     if overfit:
-        train = train.select(range(min(overfit, len(train))))
+        # balanced pick: half tampered, half clean — else the 5+ identical clean
+        # targets memorize instantly and starve the harder unique tampered targets,
+        # and greedy decode collapses to "clean" (seen with a first-N pick).
+        tamp = [i for i in range(len(train)) if train[i]["tampered"]]
+        clean = [i for i in range(len(train)) if not train[i]["tampered"]]
+        half = overfit // 2
+        idx = tamp[:half] + clean[:overfit - half]
+        train = train.select(sorted(idx))
         val = None
     return train, val
 
@@ -86,7 +93,7 @@ def build_trainer(cfg, overfit=None):
         # memorize 8 examples: tiny batch, many steps, no eval/checkpoints
         sft_kwargs.update(
             per_device_train_batch_size=1, gradient_accumulation_steps=1,
-            num_train_epochs=1, max_steps=60, logging_steps=1,
+            num_train_epochs=1, max_steps=250, logging_steps=5,
             save_strategy="no", eval_strategy="no", warmup_ratio=0.0,
         )
     else:
