@@ -39,15 +39,25 @@ def lora_config(r=16, lora_alpha=32, lora_dropout=0.05):
 
 
 def load_model_for_training(use_4bit=True, attn="sdpa", lora=True,
-                            r=16, lora_alpha=32, lora_dropout=0.05):
+                            r=16, lora_alpha=32, lora_dropout=0.05,
+                            device_map=None):
     """Load Qwen2-VL-2B (4-bit NF4 by default) + attach LoRA. CUDA-only when use_4bit.
 
     attn="sdpa" on T4 (Turing, no FA2 — D8). Switch to "flash_attention_2" only on
     Ampere (sm_80+).
+
+    device_map defaults to SINGLE GPU ({"":0}), NOT "auto". A 2B model in 4-bit is
+    ~1.5 GB and fits one T4; sharding it across 2 T4s made Qwen2-VL's autoregressive
+    generate() emit wrong tokens (KV-cache/hidden states crossing the device split)
+    even though the teacher-forced forward was 100% correct. Single-GPU load fixes
+    generation and training both (multi-GPU DDP is a stretch item, §9, not this).
     """
     import torch
     from peft import get_peft_model, prepare_model_for_kbit_training
     from transformers import BitsAndBytesConfig, Qwen2VLForConditionalGeneration
+
+    if device_map is None:
+        device_map = {"": 0}
 
     bnb = None
     if use_4bit:
@@ -58,7 +68,7 @@ def load_model_for_training(use_4bit=True, attn="sdpa", lora=True,
 
     model = Qwen2VLForConditionalGeneration.from_pretrained(
         MODEL_ID, quantization_config=bnb, torch_dtype=torch.bfloat16,
-        attn_implementation=attn, device_map="auto",
+        attn_implementation=attn, device_map=device_map,
     )
 
     if use_4bit:
