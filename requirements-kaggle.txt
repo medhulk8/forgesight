@@ -10,10 +10,11 @@
 transformers==4.47.1
 trl==0.12.1
 peft==0.13.2
-# bitsandbytes: 0.44.1 imports triton.ops (removed in triton 3.x w/ Kaggle torch 2.10);
-# latest 0.48+ CPU-backend refactor breaks (has_avx512bf16). 0.46.1 is the working window.
-bitsandbytes==0.46.1
 accelerate==0.34.2
+# bitsandbytes: DO NOT install/override — use Kaggle's preinstalled build (same as torch).
+# Kaggle ships a bnb matched to its torch/CUDA/triton. Our pins (0.44.1 triton.ops bug,
+# 0.46/0.48 backend refactor) all mismatched and layering them left inconsistent on-disk
+# files (has_avx512bf16 / _cuda_device_of import errors). Kaggle's own bnb just works.
 datasets==5.0.0            # pinned: dataset dump built with 5.0.0 (JSONL, so tolerant, but keep aligned)
 qwen-vl-utils
 jinja2                     # required by transformers apply_chat_template
