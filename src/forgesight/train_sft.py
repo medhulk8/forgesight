@@ -33,16 +33,42 @@ def _load_splits(data_root, overfit=None):
     ds = load_dataset("json", data_files=files)
     train = ds["train"]
     val = ds["val"]
+
     if overfit:
-        # balanced pick: half tampered, half clean — else the 5+ identical clean
-        # targets memorize instantly and starve the harder unique tampered targets,
-        # and greedy decode collapses to "clean" (seen with a first-N pick).
-        tamp = [i for i in range(len(train)) if train[i]["tampered"]]
-        clean = [i for i in range(len(train)) if not train[i]["tampered"]]
-        half = overfit // 2
-        idx = tamp[:half] + clean[:overfit - half]
-        train = train.select(sorted(idx))
-        val = None
+        # mixed pick: half tampered SPANNING the 3 ops (round-robin) + half clean.
+        # Spanning ops matters for the diagnostic — a first-N pick can be all one op
+        # and won't prove the vision signal path generalizes across forgery types.
+        by_op = {}
+        clean = []
+        for i in range(len(train)):
+            r = train[i]
+            if r["tampered"]:
+                by_op.setdefault(r["tamper_type"], []).append(i)
+            else:
+                clean.append(i)
+        ops = list(by_op)
+        tamp, k = [], 0
+        while len(tamp) < overfit // 2 and any(by_op[o] for o in ops):
+            o = ops[k % len(ops)]
+            if by_op[o]:
+                tamp.append(by_op[o].pop(0))
+            k += 1
+        idx = sorted(tamp + clean[:overfit - len(tamp)])
+        return train.select(idx), None
+
+    # Full run: DROP the 50/50 clean oversampling. The dataset stores clean images
+    # duplicated to balance 50/50, but a duplicated clean target is a constant
+    # sequence seen ~1000x -> gradient sink -> always-"clean" collapse. Keep unique
+    # clean only -> ~2:1 tampered:clean, matching the test distribution.
+    seen, keep = set(), []
+    for i in range(len(train)):
+        r = train[i]
+        if r["tampered"]:
+            keep.append(i)
+        elif r["image_path"] not in seen:
+            seen.add(r["image_path"])
+            keep.append(i)
+    train = train.select(keep)
     return train, val
 
 
@@ -91,10 +117,12 @@ def build_trainer(cfg, overfit=None):
     )
 
     if overfit:
-        # memorize 8 examples: tiny batch, many steps, no eval/checkpoints
+        # memorize a few examples: tiny batch, no eval/checkpoints. 100 steps is
+        # enough to reveal DIRECTION (does it emit tampered:true on the tampered
+        # ones?) at 512px without a long wait — the decisive signal-path gate.
         sft_kwargs.update(
             per_device_train_batch_size=1, gradient_accumulation_steps=1,
-            num_train_epochs=1, max_steps=250, logging_steps=5,
+            num_train_epochs=1, max_steps=100, logging_steps=5,
             save_strategy="no", eval_strategy="no", warmup_ratio=0.0,
         )
     else:

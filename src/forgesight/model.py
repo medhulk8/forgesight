@@ -17,12 +17,23 @@ MODEL_ID = "Qwen/Qwen2-VL-2B-Instruct"
 MIN_PIXELS = 128 * 28 * 28
 MAX_PIXELS = 512 * 28 * 28
 
-# LoRA on the LLM projection layers only; vision tower frozen (cheaper, stable,
-# standard for VLM QLoRA). Unfreezing the merger is a possible ablation (§8).
+# LoRA targets. The first SFT collapsed to always-"clean" because LoRA touched
+# only the LLM while the VISION tower stayed frozen — so the trainable params
+# never adapted to forgery artifacts and had no separable signal (SESSIONS
+# 2026-07-23). Fix: LoRA on the LLM projections AND the vision blocks' attention
+# (qkv/proj), plus fully training the vision->LLM merger (modules_to_save).
 LORA_TARGET_MODULES = [
-    "q_proj", "k_proj", "v_proj", "o_proj",
-    "gate_proj", "up_proj", "down_proj",
+    "q_proj", "k_proj", "v_proj", "o_proj",     # LLM attention
+    "gate_proj", "up_proj", "down_proj",        # LLM MLP
 ]
+# Qwen2-VL vision blocks: VisionAttention.qkv (fused Q/K/V Linear). We target ONLY
+# "qkv", NOT "proj": in transformers 4.47.1 modeling_qwen2_vl, PatchEmbed.proj is a
+# nn.Conv3d (L287) and the "proj" suffix would match it — LoRA can't wrap a Conv3d
+# and get_peft_model raises. "qkv" is unique to vision attention (Linear, no LLM or
+# Conv3d collision); the vision out-projection is covered by training the merger.
+VISION_LORA_MODULES = ["qkv"]
+# vision->LLM bridge (Qwen2VLPatchMerger); trained fully (kept in fp16, see below).
+MERGER_MODULE = "visual.merger"
 
 
 def load_processor(min_pixels=MIN_PIXELS, max_pixels=MAX_PIXELS):
@@ -32,13 +43,24 @@ def load_processor(min_pixels=MIN_PIXELS, max_pixels=MAX_PIXELS):
         MODEL_ID, min_pixels=min_pixels, max_pixels=max_pixels)
 
 
-def lora_config(r=16, lora_alpha=32, lora_dropout=0.05):
-    """Build the LoRA config (import-safe on M3 — peft has no CUDA requirement)."""
+def lora_config(r=16, lora_alpha=32, lora_dropout=0.05, vision=True):
+    """Build the LoRA config (import-safe on M3 — peft has no CUDA requirement).
+
+    vision=True adds the vision blocks' attention to the LoRA targets and marks
+    the merger for full training (modules_to_save). vision=False reproduces the
+    original LLM-only config (the collapsed baseline — kept for ablation).
+    """
     from peft import LoraConfig
+
+    targets = list(LORA_TARGET_MODULES)
+    save = None
+    if vision:
+        targets += VISION_LORA_MODULES
+        save = [MERGER_MODULE]
 
     return LoraConfig(
         r=r, lora_alpha=lora_alpha, lora_dropout=lora_dropout, bias="none",
-        target_modules=LORA_TARGET_MODULES, task_type="CAUSAL_LM",
+        target_modules=targets, modules_to_save=save, task_type="CAUSAL_LM",
     )
 
 
@@ -64,11 +86,14 @@ def load_model_for_training(use_4bit=True, attn="sdpa", lora=True,
         device_map = {"": 0}
 
     # T4 (Turing) has fp16 tensor cores but NOT bf16 → use fp16 compute for speed.
+    # Skip quantizing the merger: modules_to_save trains it, and a trainable copy
+    # of a 4-bit module is unsafe — keep it in fp16.
     bnb = None
     if use_4bit:
         bnb = BitsAndBytesConfig(
             load_in_4bit=True, bnb_4bit_quant_type="nf4",
             bnb_4bit_compute_dtype=torch.float16, bnb_4bit_use_double_quant=True,
+            llm_int8_skip_modules=["merger"],
         )
 
     model = Qwen2VLForConditionalGeneration.from_pretrained(

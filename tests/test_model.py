@@ -15,11 +15,24 @@ def test_lora_target_modules_are_llm_projections():
         "q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
 
 
-def test_lora_config_builds():
-    cfg = model.lora_config(r=16, lora_alpha=32, lora_dropout=0.05)
+def test_vision_lora_modules():
+    # ONLY "qkv": "proj" would collide with PatchEmbed.proj (a Conv3d) which LoRA
+    # cannot wrap. "qkv" is unique to the vision attention Linear.
+    assert model.VISION_LORA_MODULES == ["qkv"]
+
+
+def test_lora_config_vision_on():
+    cfg = model.lora_config(r=16, lora_alpha=32, lora_dropout=0.05)   # vision=True default
     assert cfg.r == 16 and cfg.lora_alpha == 32
     assert cfg.task_type == "CAUSAL_LM" and cfg.bias == "none"
+    assert set(cfg.target_modules) == set(model.LORA_TARGET_MODULES) | set(model.VISION_LORA_MODULES)
+    assert cfg.modules_to_save == [model.MERGER_MODULE]
+
+
+def test_lora_config_vision_off_matches_legacy():
+    cfg = model.lora_config(vision=False)
     assert set(cfg.target_modules) == set(model.LORA_TARGET_MODULES)
+    assert cfg.modules_to_save is None
 
 
 def test_train_sft_import_safe():

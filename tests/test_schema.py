@@ -109,8 +109,18 @@ def test_to_target_json_tampered():
 
 def test_to_target_json_clean():
     obj = json.loads(schema.to_target_json(_clean_record()))
-    assert obj == {"tampered": False, "field": None, "box": None,
-                   "reason": "No inconsistencies detected."}
+    assert obj["tampered"] is False and obj["field"] is None and obj["box"] is None
+    # reason is diversified per-image (breaks the constant-target sink) but must
+    # come from the fixed template set and be deterministic for a given image.
+    assert obj["reason"] in schema.CLEAN_REASONS
+    assert obj["reason"] == json.loads(schema.to_target_json(_clean_record()))["reason"]
+
+
+def test_clean_reason_deterministic_and_spread():
+    # same key -> same reason; different keys -> not all identical (sink broken).
+    assert schema.clean_reason_for("a.png") == schema.clean_reason_for("a.png")
+    picks = {schema.clean_reason_for(f"img{i}.png") for i in range(50)}
+    assert len(picks) > 1
 
 
 def test_to_target_json_tampered_missing_box_raises():

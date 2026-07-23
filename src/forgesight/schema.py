@@ -18,6 +18,7 @@ token surviving — robust if a token is dropped (§4 regex note).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 
@@ -25,6 +26,39 @@ from . import coords
 
 BOX_START = "<|box_start|>"
 BOX_END = "<|box_end|>"
+
+# Clean-verdict reason templates. A single constant clean reason (the original
+# "No inconsistencies detected." repeated on every clean example) is a gradient
+# sink: it becomes the most-frequent target sequence by far and the model
+# collapses onto always-"clean" (see SESSIONS 2026-07-23). We diversify the clean
+# reason deterministically per image (stable md5 pick) so no single string
+# dominates, while keeping targets reproducible. Chosen at render time, so no
+# dataset rebuild/re-upload is needed.
+CLEAN_REASONS = (
+    "No inconsistencies detected.",
+    "No visual evidence of tampering found.",
+    "Document layout and font structures are consistent.",
+    "All text fields appear authentic.",
+    "Fonts, spacing, and alignment are uniform throughout.",
+    "No signs of digit or field alteration.",
+    "Ink, stroke weight, and baselines are consistent across the document.",
+    "No copy-paste or splice artifacts detected.",
+    "The document appears original and unmodified.",
+    "Field values are consistent with the surrounding text.",
+    "No compression or edge artifacts found around any field.",
+    "Nothing indicates the document has been edited.",
+)
+
+
+def clean_reason_for(key: str) -> str:
+    """Deterministic clean-reason pick from CLEAN_REASONS, stable across machines.
+
+    Keyed on the image path (md5, not Python's salted hash) so a given clean
+    image always maps to the same reason — reproducible, yet spread across the
+    template set to break the single-constant-target attractor.
+    """
+    h = int(hashlib.md5((key or "").encode("utf-8")).hexdigest(), 16)
+    return CLEAN_REASONS[h % len(CLEAN_REASONS)]
 
 # match the (x1,y1),(x2,y2) core regardless of surrounding tokens (§4).
 _BOX_RE = re.compile(
@@ -89,7 +123,8 @@ def to_target_json(record) -> str:
             "tampered": False,
             "field": None,
             "box": None,
-            "reason": record.get("reason", "No inconsistencies detected."),
+            # diversify per-image to break the constant-target gradient sink
+            "reason": clean_reason_for(record.get("image_path")),
         }
     # dict literal above already fixes key order (py3.7+ preserves insertion).
     return json.dumps(obj, ensure_ascii=False)
