@@ -10,7 +10,9 @@
 transformers==4.47.1
 trl==0.12.1
 peft==0.13.2
-bitsandbytes==0.44.1
+# bitsandbytes 0.44.1 imports triton.ops, removed in triton 3.x that ships with
+# Kaggle's torch 2.10 -> ModuleNotFoundError. Use a recent bnb built for torch 2.x/cu12x.
+bitsandbytes>=0.46
 accelerate==0.34.2
 datasets==5.0.0            # pinned: dataset dump built with 5.0.0 (JSONL, so tolerant, but keep aligned)
 qwen-vl-utils
