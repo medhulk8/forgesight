@@ -139,15 +139,19 @@ def _report_overfit(trainer, processor, train_ds, cfg):
     from . import schema
     from .data import conversation
 
+    from qwen_vl_utils import process_vision_info
+
+    from . import coords
+
     model = trainer.model
     model.eval()
     device = next(model.parameters()).device
-    ok = 0
+    det_ok = 0          # detection (tampered bool) correct
+    ious = []           # IoU on true-positive boxes
     for i in range(len(train_ds)):
         rec = train_ds[i]
         msgs = conversation.build_messages(rec, data_root=cfg["data_root"],
                                            include_target=False)
-        from qwen_vl_utils import process_vision_info
         text = processor.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
         imgs, _ = process_vision_info(msgs)
         inputs = processor(text=[text], images=[imgs], return_tensors="pt").to(device)
@@ -155,12 +159,23 @@ def _report_overfit(trainer, processor, train_ds, cfg):
             out = model.generate(**inputs, max_new_tokens=128, do_sample=False)
         gen = processor.tokenizer.decode(
             out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=False)
-        want = schema.to_target_json(rec)
-        match = gen.strip().startswith(want)   # memorized target reproduced verbatim
-        ok += bool(match)
-        print(f"[{i}] target: {want}")
-        print(f"    gen   : {gen.strip()[:160]}")
-    print(f"\noverfit-8 reproduced {ok}/{len(train_ds)} targets exactly.")
+
+        pred = schema.parse_prediction(gen)
+        det = pred is not None and bool(pred["tampered"]) == bool(rec["tampered"])
+        det_ok += det
+        iou = None
+        if det and rec["tampered"] and pred.get("box_norm"):
+            tgt_norm = coords.pixel_to_norm(rec["box_pixel"], rec["width"], rec["height"])
+            iou = coords.iou(pred["box_norm"], tgt_norm)
+            ious.append(iou)
+        print(f"[{i}] {rec.get('tamper_type') or 'clean':16s} det={det}"
+              + (f" IoU={iou:.2f}" if iou is not None else ""))
+        print(f"    gen: {gen.strip()[:150]}")
+
+    mean_iou = sum(ious) / len(ious) if ious else 0.0
+    hit50 = sum(v >= 0.5 for v in ious)
+    print(f"\noverfit-{len(train_ds)}: detection {det_ok}/{len(train_ds)} correct | "
+          f"boxes: mean IoU {mean_iou:.2f}, IoU@0.5 {hit50}/{len(ious)}")
 
 
 if __name__ == "__main__":
