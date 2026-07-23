@@ -16,11 +16,15 @@ import zlib
 
 from .copy_move import CopyMoveOp
 from .digit_swap import DigitSwapOp
-from .recompress_ghost import RecompressGhostOp
 from .splice import SpliceOp
 
-# canonical op order (D-order, §5)
-OP_NAMES = ["digit_swap", "copy_move", "splice", "recompress_ghost"]
+# Active ops (§5). recompress_ghost DROPPED for v1: its signal is the JPEG
+# double-compression grid artifact, which our downscale+JPEG storage destroys →
+# the class becomes unlearnable and, if kept, teaches the model to output
+# "tampered" with no visual basis (poisons the D5 hard-negative baseline). The op
+# lives on in recompress_ghost.py but is not wired in. Three visually-grounded ops
+# = manipulation / duplication / insertion.
+OP_NAMES = ["digit_swap", "copy_move", "splice"]
 
 # labels worth harvesting as splice donors (field values, not headers/noise)
 _DONOR_LABELS = {"total", "line_total", "date", "company", "address", "answer"}
@@ -57,7 +61,6 @@ def build_ops(source: str, donor_pool: dict) -> dict:
         "digit_swap": DigitSwapOp(),
         "copy_move": CopyMoveOp(),
         "splice": SpliceOp(donor_pool.get(source, [])),
-        "recompress_ghost": RecompressGhostOp(),
     }
 
 
