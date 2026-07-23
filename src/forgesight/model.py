@@ -10,10 +10,12 @@ from __future__ import annotations
 MODEL_ID = "Qwen/Qwen2-VL-2B-Instruct"
 
 # min/max visual tokens — the main VRAM/seq-length AND SPEED lever on T4 (§8).
-# Lowered from 768 -> 384 max: receipts/forms are readable at ~300k px and this
-# ~halves the image-token count → ~2x faster training with negligible field-OCR loss.
+# 512 (up from a 384 first pass): the 1-epoch/384 SFT collapsed to always-"clean"
+# (underfit of the positive class); 512 restores tamper signal — esp. the single
+# altered glyph in digit_swap — at ~1.3x the 384 token cost. Train + inference MUST
+# use the same value (this constant feeds both load_processor paths).
 MIN_PIXELS = 128 * 28 * 28
-MAX_PIXELS = 384 * 28 * 28
+MAX_PIXELS = 512 * 28 * 28
 
 # LoRA on the LLM projection layers only; vision tower frozen (cheaper, stable,
 # standard for VLM QLoRA). Unfreezing the merger is a possible ablation (§8).

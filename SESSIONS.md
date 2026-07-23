@@ -4,6 +4,27 @@ _Newest entry at top._
 
 ---
 
+## 2026-07-23 — Steps 11–12 executed: full SFT + ForgeBench; class-collapse found; README + resume shipped
+
+**Step 11 full SFT — DONE.** Single T4, fp16, `max_pixels=384`, 1 epoch, 280 steps. Train loss 9.47 → ~1.4 (clean fall, did NOT approach 0). Adapter saved.
+- In-loop eval killed mid-run: `per_device_eval_batch_size` defaults to **8** → 8 val images through vision-tower SDPA = 8.41 GiB → OOM at step 100. Fix for the run: `eval_strategy="no"`, save at end. Lost val-loss curve; kept train-loss curve. (Proper fix = thread `per_device_eval_batch_size=1`; deferred.)
+
+**Step 12 ForgeBench — RAN, result was a class-collapse (not a code bug).**
+- Both fine-tuned + zero-shot baseline: `F1=0.000`, `0 TP`, `parse-fail=0%`, `ΔF1=0`, `McNemar p=1`.
+- Debug (raw generations on known-tampered test rows): model emits **valid JSON but `tampered:false` on everything**, with the exact clean target string `"No inconsistencies detected."`. That verbatim string only exists in our clean targets → **adapter IS loaded/working** (rules out the load-path/multi-GPU bug); the model simply learned to always output the easy constant clean target.
+- **Root cause = underfit of the positive class.** Clean target is a fixed constant string (trivial attractor); tampered targets carry a unique box each (high-variance, harder). 1 epoch + cosine-to-0 over only 280 steps under-trained the hard class → collapse to majority-easy output. splice AND copy_move (large, visible regions) were also missed → argues underfit-primary, not pure resolution.
+- **NOT posting F1=0 anywhere** — it is an underfit artifact, not the model's ceiling.
+
+**Deliverables shipped (deadline):** README full technical rewrite (thesis, engineering log, design rationale, limitations, MIT LICENSE, quick-stats, grounding-token-id note) — committed. Resume project bullets written (method-only, zero fabricated metrics, matched to a fixed 3-bullet LaTeX format). Resume submitted.
+
+**Fix queued (quality run, no deadline):** `num_train_epochs 3`, `max_pixels 384→512` (better tamper signal, esp. digit_swap), keep lr 1e-4 / fp16 / single-GPU / eval-off + save-per-epoch. Re-run ForgeBench (baseline + McNemar) → real numbers → fill README Results + optionally add a metric bullet. Escalate epochs/resolution only if still collapsed.
+
+**Deviations from plan (all deliberate, documented):** recompress_ghost dropped (JPEG storage killed the artifact); single-GPU not 2×T4 (multi-GPU generate bug); bf16→fp16 (T4 Turing has no bf16 tensor cores); JSONL+JPEG not Arrow; serving profile (step 13) still a stub — post-submit follow-up.
+
+**Gemini consultation:** README review (returned "Staff-level, human voice, zero over-claiming"); condition-update prompt on class-collapse + retrain plan issued.
+
+---
+
 ## 2026-07-23 — Steps 9–10 executed on Kaggle: gates + two real bugs fixed
 
 **Step 9 gate PASSED:** after resolving Kaggle env drift (below), 4-bit Qwen2-VL-2B loaded, LoRA 18.5M/2.23B = 0.83% (vision frozen). 

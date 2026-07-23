@@ -29,6 +29,7 @@ def test_train_sft_import_safe():
 
 
 def test_pixel_bounds_constants():
-    # lowered for T4 speed (§8 seq-length lever); max must stay a 28x28-patch multiple
-    assert model.MIN_PIXELS == 128 * 28 * 28 and model.MAX_PIXELS == 384 * 28 * 28
+    # 512 balances tamper signal vs T4 cost (§8 seq-length lever); max must stay a
+    # 28x28-patch multiple. Train + inference read the same constant.
+    assert model.MIN_PIXELS == 128 * 28 * 28 and model.MAX_PIXELS == 512 * 28 * 28
     assert model.MAX_PIXELS % (28 * 28) == 0 and model.MIN_PIXELS < model.MAX_PIXELS
