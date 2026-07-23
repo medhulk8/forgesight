@@ -109,7 +109,7 @@ def build(config: dict):
     # leakage assertion: no doc_id in more than one split
     _assert_no_leakage(split_records)
 
-    _write_hf_datasets(out_dir, split_records)
+    _write_jsonl(out_dir, split_records)
     return split_records
 
 
@@ -123,11 +123,19 @@ def _assert_no_leakage(split_records):
             seen[r["doc_id"]] = sp
 
 
-def _write_hf_datasets(out_dir, split_records):
-    from datasets import Dataset
+def _write_jsonl(out_dir, split_records):
+    """Persist each split as <out>/<split>.jsonl (one record per line).
+
+    JSONL + raw PNGs is deliberately used over HF save_to_disk (Arrow): it is
+    portable across datasets versions (Kaggle vs M3 drift), human-inspectable, and
+    loads back with `datasets.load_dataset('json', data_files=...)`.
+    """
+    import json
 
     for sp, recs in split_records.items():
-        Dataset.from_list(recs).save_to_disk(os.path.join(out_dir, sp))
+        with open(os.path.join(out_dir, f"{sp}.jsonl"), "w") as f:
+            for r in recs:
+                f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
 
 # --------------------------------------------------------------------------- #

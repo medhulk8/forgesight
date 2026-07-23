@@ -4,6 +4,31 @@ _Newest entry at top._
 
 ---
 
+## 2026-07-23 — Stages §13 steps 8–10 (code) — Kaggle bridge; GPU gates pending
+
+**Stage:** §13 step 8 (Kaggle bridge) + step 9 (`model.py`) + step 10 (`train_sft.py` overfit-8) — all CODE written; GPU gates run on Kaggle by user (M3 has no CUDA/bitsandbytes, D10).
+
+**Implemented:**
+- **Persistence → JSONL** (Gemini): `build_dataset._write_jsonl` writes `<out>/<split>.jsonl` (dropped Arrow `save_to_disk` — version-drift trap across M3/Kaggle datasets versions). `make_manifest.py` reads JSONL. Re-ran build: identical 2964 examples, now as JSONL + PNGs. **Verified end-to-end on M3**: `load_dataset('json')` → 2244 train rows, collator on 4 real records+images → decoded span == target JSON for all, no warnings.
+- `requirements-kaggle.txt`: pinned transformers/trl/peft/bnb/accelerate (§3.2) + datasets==5.0.0 + qwen-vl-utils + jinja2. **No torch/torchvision** (Gemini: Kaggle ships CUDA torch; pip-installing breaks bindings). No flash-attn (D8).
+- `model.py`: `load_processor` (CPU-safe), `lora_config`, `load_model_for_training(use_4bit, attn='sdpa', lora)` — 4-bit NF4 + double-quant, LoRA on 7 LLM proj modules, vision tower frozen.
+- `configs/sft.yaml` (§9 hyperparams) + `train_sft.py`: `build_trainer` wires TRL SFTTrainer with our collator, `remove_unused_columns=False`, `dataset_kwargs={'skip_prepare_dataset':True}`, `processing_class=processor.tokenizer`, gradient checkpointing (use_reentrant=False). `--overfit 8` → tiny batch/60 steps/no eval; `_report_overfit` generates on the 8 and checks verbatim JSON reproduction.
+- `notebooks/forgesight_kaggle.ipynb`: 8 cells — clone via `GH_PAT` secret, install, sanity, 4-bit load (step-9 gate), overfit-8 (step-10 gate), loss plot, reproduce check.
+- `KAGGLE_UPLOAD.md` (tracked handoff): upload steps, secret setup, notebook settings, gates to report.
+- `tests/test_model.py`: 5 import-safe tests (MODEL_ID, LoRA target modules, lora_config builds, train_sft import-safe, pixel constants). Suite 113 green.
+
+**Decisions (all Gemini step-8/9 answers accepted):** JSONL+PNG over Arrow; no torch in Kaggle reqs; PAT-in-Secrets + git clone (not repo-as-dataset — instant push/pull iteration); `data_root` injection for read-only `/kaggle/input` mount.
+
+**Env notes:** installed peft==0.13.2 on M3 (CPU, for the lora_config test — no CUDA needed). Dataset dir is ~2.1 GB (2403 lossless PNGs). trl/bitsandbytes NOT installed on M3 (Kaggle-only) → train_sft heavy imports are deferred inside functions so the module still imports for tests.
+
+**Split of work:** M3-verifiable gates DONE (JSONL load + collator on real data, 113 tests). GPU gates (step 9 4-bit load, step 10 overfit-8 loss→0 + JSON reproduction) PENDING — user runs the notebook on Kaggle and reports the loss curve.
+
+**Risk flagged:** TRL 0.12.1 SFTTrainer/SFTConfig arg surface (esp. `processing_class`, `dataset_kwargs`, `max_seq_length` with skip_prepare_dataset) is written to the pin but UNVERIFIED without a GPU run — the overfit-8 is where any API drift surfaces first (as planned).
+
+**Next session starts with:** user's overfit-8 result. If loss→0 + JSONs reproduce → architecture phase won, proceed to step 11 (full SFT). Else debug collator/trainer wiring from the curve + cell-7 output.
+
+---
+
 ## 2026-07-22 — Stage §13 step 7 (`collator.py`) — M3 CRUX, PASSED
 
 **Stage:** §13 step 7 — THE data collator + smoke gate. Completes the M3 (GPU-free) phase.

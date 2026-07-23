@@ -1,0 +1,17 @@
+# Kaggle T4 training deps (§3.2). Install in the notebook's first cell.
+#
+# DO NOT install torch / torchvision here — Kaggle ships pre-compiled CUDA
+# PyTorch wheels; pip-installing torch triggers a ~3GB download and can break the
+# CUDA bindings. Rely on the base Kaggle PyTorch.
+#
+# DO NOT install flash-attn on T4 (Turing sm_75) — FA2 needs Ampere (D8).
+# Use attn_implementation="sdpa".
+
+transformers==4.47.1
+trl==0.12.1
+peft==0.13.2
+bitsandbytes==0.44.1
+accelerate==0.34.2
+datasets==5.0.0            # pinned: dataset dump built with 5.0.0 (JSONL, so tolerant, but keep aligned)
+qwen-vl-utils
+jinja2                     # required by transformers apply_chat_template

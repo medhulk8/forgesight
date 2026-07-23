@@ -1,0 +1,28 @@
+# QLoRA SFT hyperparameters (§9). Consumed by train_sft.py → TRL SFTConfig.
+output_dir: /kaggle/working/adapters/sft
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 8          # effective batch 8 (per GPU)
+learning_rate: 1.0e-4
+lr_scheduler_type: cosine
+warmup_ratio: 0.03
+num_train_epochs: 2                     # start 2; watch val loss for over/underfit
+bf16: true
+gradient_checkpointing: true            # essential for T4 VRAM
+logging_steps: 10
+eval_strategy: steps
+eval_steps: 100
+save_strategy: steps
+save_steps: 100
+save_total_limit: 2
+report_to: none
+max_grad_norm: 0.3
+optim: paged_adamw_8bit                 # bnb paged optimizer -> fits T4
+
+# LoRA
+lora_r: 16
+lora_alpha: 32
+lora_dropout: 0.05
+
+# data
+data_root: /kaggle/input/forgesight-data
+max_length: 2048

@@ -1,1 +1,71 @@
-"""ForgeSight model.py — stub. Implemented in a later §13 build step."""
+"""Load Qwen2-VL-2B + QLoRA config + processor (§8). GPU-only path (4-bit is
+CUDA/bitsandbytes-only, D10) — exercised on Kaggle, not the M3.
+
+`load_processor` is CPU-safe (used by the M3 collator smoke test too). The 4-bit
+model load lives behind `load_model_for_training` and requires CUDA.
+"""
+
+from __future__ import annotations
+
+MODEL_ID = "Qwen/Qwen2-VL-2B-Instruct"
+
+# min/max visual tokens — the main VRAM/seq-length lever on T4 (§8). Tune down if OOM.
+MIN_PIXELS = 256 * 28 * 28
+MAX_PIXELS = 768 * 28 * 28
+
+# LoRA on the LLM projection layers only; vision tower frozen (cheaper, stable,
+# standard for VLM QLoRA). Unfreezing the merger is a possible ablation (§8).
+LORA_TARGET_MODULES = [
+    "q_proj", "k_proj", "v_proj", "o_proj",
+    "gate_proj", "up_proj", "down_proj",
+]
+
+
+def load_processor(min_pixels=MIN_PIXELS, max_pixels=MAX_PIXELS):
+    from transformers import AutoProcessor
+
+    return AutoProcessor.from_pretrained(
+        MODEL_ID, min_pixels=min_pixels, max_pixels=max_pixels)
+
+
+def lora_config(r=16, lora_alpha=32, lora_dropout=0.05):
+    """Build the LoRA config (import-safe on M3 — peft has no CUDA requirement)."""
+    from peft import LoraConfig
+
+    return LoraConfig(
+        r=r, lora_alpha=lora_alpha, lora_dropout=lora_dropout, bias="none",
+        target_modules=LORA_TARGET_MODULES, task_type="CAUSAL_LM",
+    )
+
+
+def load_model_for_training(use_4bit=True, attn="sdpa", lora=True,
+                            r=16, lora_alpha=32, lora_dropout=0.05):
+    """Load Qwen2-VL-2B (4-bit NF4 by default) + attach LoRA. CUDA-only when use_4bit.
+
+    attn="sdpa" on T4 (Turing, no FA2 — D8). Switch to "flash_attention_2" only on
+    Ampere (sm_80+).
+    """
+    import torch
+    from peft import get_peft_model, prepare_model_for_kbit_training
+    from transformers import BitsAndBytesConfig, Qwen2VLForConditionalGeneration
+
+    bnb = None
+    if use_4bit:
+        bnb = BitsAndBytesConfig(
+            load_in_4bit=True, bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=True,
+        )
+
+    model = Qwen2VLForConditionalGeneration.from_pretrained(
+        MODEL_ID, quantization_config=bnb, torch_dtype=torch.bfloat16,
+        attn_implementation=attn, device_map="auto",
+    )
+
+    if use_4bit:
+        model = prepare_model_for_kbit_training(model)
+
+    if lora:
+        model = get_peft_model(model, lora_config(r, lora_alpha, lora_dropout))
+        model.print_trainable_parameters()
+
+    return model
