@@ -4,6 +4,26 @@ _Newest entry at top._
 
 ---
 
+## 2026-07-23 — Steps 9–10 executed on Kaggle: gates + two real bugs fixed
+
+**Step 9 gate PASSED:** after resolving Kaggle env drift (below), 4-bit Qwen2-VL-2B loaded, LoRA 18.5M/2.23B = 0.83% (vision frozen). 
+
+**Kaggle env fixes (drift from §3.2 pins):**
+- Namespace shadow: repo dir `forgesight` shadowed `src/forgesight` → cell 3 does `sys.path.insert(0,'src')`. Removed `pip install -e .`.
+- bitsandbytes: 0.44.1 imports removed `triton.ops` (Kaggle torch 2.10/triton 3.x); pin-layering left inconsistent files. Fix: Kaggle doesn't preinstall bnb → install UNPINNED (got 0.49.2 clean). requirements-kaggle updated.
+- Dataset mounts at `/kaggle/input/datasets/<owner>/<slug>/`, not `/kaggle/input/<slug>/`.
+- Dataset too big to upload (2.1 GB PNG) → switched storage to downscaled JPEG (max_side 1024, q90) = 247 MB. Records unchanged (coords resolution-independent).
+
+**Step 10 (overfit-8) — pipeline PROVEN, via two real bug fixes:**
+- **Multi-GPU generate bug:** `device_map="auto"` sharded the model across 2×T4; teacher-forced accuracy was 1.0 / tf_loss≈0 but `generate()` emitted "clean" for all tampered. Root cause: KV-cache/hidden states corrupt across the device split. **Fix: `device_map={"":0}` single-GPU** (2B/4-bit fits one T4). After fix, digit_swap generates tamper+field+box correctly, all clean correct. Diagnosis chain recorded in memory [[qwen2vl-multigpu-generate-bug]].
+- Overfit metric was too strict (verbatim string) — box coords aren't memorized digit-for-digit under greedy (expected; IoU@0.5 is the metric). `_report_overfit` now scores detection + IoU.
+
+**OPEN ISSUE (needs decision):** `recompress_ghost` examples still generate "clean" — its signal IS the JPEG double-compression grid artifact, and our storage change (downscale + re-JPEG q90) destroys exactly that. So ghost images are ~indistinguishable from clean; unlearnable/undetectable. digit_swap/copy_move/splice are pixel-level edits and survive JPEG fine. Consulting Gemini: store ghost lossless vs drop the op vs rework. Affects step-11 training + D7 per-type eval.
+
+**Next:** resolve ghost decision (Gemini), then step 11 (full SFT single-GPU). Model/train code now single-GPU + balanced overfit + IoU reporting, all pushed.
+
+---
+
 ## 2026-07-23 — Step 8 exec: dataset uploaded to Kaggle (after size fix)
 
 **What happened:** set up Kaggle CLI on M3 (uv-installed `kaggle`, token at `~/.kaggle/access_token`, auth OK — username **medhulkhandelwal**). First upload of `data/processed/` (2.1 GB, full-res lossless PNG) repeatedly died with `BrokenPipeError` to googleapis at ~97% of the 1.67 GB images.zip — flaky link + oversized dump.
