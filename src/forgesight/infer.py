@@ -19,12 +19,18 @@ def load_for_inference(adapter_dir=None, use_4bit=True, attn="sdpa"):
     from transformers import BitsAndBytesConfig, Qwen2VLForConditionalGeneration
 
     processor = model_mod.load_processor()
+    # MUST mirror load_model_for_training's quant config: skip quantizing lm_head
+    # + merger. The trained adapter carries modules_to_save=["visual.merger"];
+    # loading it wraps the merger and sets requires_grad, which fails if the merger
+    # is a 4-bit int tensor. Keep it fp16 (skip) so the adapter loads. fp16 (not
+    # bf16) matches training and the T4.
     bnb = BitsAndBytesConfig(
         load_in_4bit=True, bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=True,
+        bnb_4bit_compute_dtype=torch.float16, bnb_4bit_use_double_quant=True,
+        llm_int8_skip_modules=["lm_head", "merger"],
     ) if use_4bit else None
     net = Qwen2VLForConditionalGeneration.from_pretrained(
-        model_mod.MODEL_ID, quantization_config=bnb, torch_dtype=torch.bfloat16,
+        model_mod.MODEL_ID, quantization_config=bnb, torch_dtype=torch.float16,
         attn_implementation=attn, device_map={"": 0},
     )
     if adapter_dir:
