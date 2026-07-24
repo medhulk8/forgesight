@@ -117,12 +117,12 @@ def build_trainer(cfg, overfit=None):
     )
 
     if overfit:
-        # memorize a few examples: tiny batch, no eval/checkpoints. 100 steps is
-        # enough to reveal DIRECTION (does it emit tampered:true on the tampered
-        # ones?) at 512px without a long wait — the decisive signal-path gate.
+        # fit a few examples: batch 1 (grad_accum 1 = the regime the working overfit
+        # used), no eval/checkpoints. Scale steps with N so each example gets ~8
+        # update-exposures — enough to prove the recipe LEARNS (not just direction).
         sft_kwargs.update(
             per_device_train_batch_size=1, gradient_accumulation_steps=1,
-            num_train_epochs=1, max_steps=100, logging_steps=5,
+            num_train_epochs=1, max_steps=max(100, overfit * 8), logging_steps=10,
             save_strategy="no", eval_strategy="no", warmup_ratio=0.0,
         )
     else:

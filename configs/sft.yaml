@@ -1,12 +1,14 @@
 # QLoRA SFT hyperparameters (§9). Consumed by train_sft.py → TRL SFTConfig.
 output_dir: /kaggle/working/adapters/sft
 per_device_train_batch_size: 1
-gradient_accumulation_steps: 8          # effective batch 8 (per GPU)
-learning_rate: 1.0e-4
+gradient_accumulation_steps: 2          # was 8: eff-batch-8 + lr 1e-4 = under-trained
+                                        # (0.37 updates/example → 1/6 train recall). The
+                                        # overfit that WORKED used grad_accum=1; ga=2 gives
+                                        # 4x more optimizer updates at ~identical compute.
+learning_rate: 1.0e-4                   # proven in the working overfit — kept, not a variable
 lr_scheduler_type: cosine
 warmup_ratio: 0.03
-num_train_epochs: 3                     # 1 epoch collapsed to always-"clean" (underfit
-                                        # positive class); 3 epochs to actually learn boxes
+num_train_epochs: 4                     # more passes → more updates; 3 epochs @ ga=8 under-fit
 bf16: false                             # T4 = Turing: NO bf16 tensor cores
 fp16: true                              # fp16 uses T4 tensor cores -> much faster
 gradient_checkpointing: true            # essential for T4 VRAM
